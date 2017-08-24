@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"github.com/ojii/gettext.go/pluralforms"
 	"log"
 	"os"
 	"strings"
+
+	"github.com/snapcore/go-gettext/pluralforms"
 )
 
 const le_magic = 0x950412de

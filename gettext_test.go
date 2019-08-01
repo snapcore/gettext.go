@@ -2,10 +2,10 @@ package gettext
 
 import (
 	"fmt"
-	"path"
-	"testing"
 	"io/ioutil"
 	"os"
+	"path"
+	"testing"
 )
 
 func TestNullTranslations(t *testing.T) {
@@ -80,7 +80,6 @@ func TestRealTranslations(t *testing.T) {
 	)
 }
 
-
 func TestPreload(t *testing.T) {
 	dir, err := ioutil.TempDir("", "gogettext")
 	if err != nil {
@@ -95,15 +94,19 @@ func TestPreload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = os.Link(
-		"testdata/en/messages.mo",
+	curDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = os.Symlink(
+		path.Join(curDir, "testdata/en/messages.mo"),
 		path.Join(dir, "en", "LC_MESSAGES", "messages.mo"),
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = os.Link(
-		"testdata/ja/messages.mo",
+	err = os.Symlink(
+		path.Join(curDir, "testdata/ja/messages.mo"),
 		path.Join(dir, "ja", "LC_MESSAGES", "messages.mo"),
 	)
 	if err != nil {

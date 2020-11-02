@@ -68,7 +68,7 @@ func (catalog nullcatalog) NGettext(msgid string, msgid_plural string, n uint32)
 }
 
 func (catalog *mocatalog) Gettext(msgid string) string {
-	idx, ok := catalog.msgIndex([]byte(msgid))
+	idx, ok := catalog.msgIndex(msgid)
 	if !ok {
 		return msgid
 	}
@@ -76,7 +76,7 @@ func (catalog *mocatalog) Gettext(msgid string) string {
 }
 
 func (catalog *mocatalog) NGettext(msgid string, msgid_plural string, n uint32) string {
-	idx, ok := catalog.msgIndex([]byte(msgid))
+	idx, ok := catalog.msgIndex(msgid)
 	if !ok {
 		if n == 1 {
 			return msgid
@@ -134,12 +134,12 @@ func (catalog *mocatalog) msgStr(idx, n int) []byte {
 	return msgstr
 }
 
-func (catalog *mocatalog) msgIndex(msgid []byte) (idx int, ok bool) {
+func (catalog *mocatalog) msgIndex(msgid string) (idx int, ok bool) {
 	// perform a binary search over origTab message IDs
 	idx = sort.Search(catalog.numStrings, func(i int) bool {
-		return bytes.Compare(catalog.msgID(i), msgid) >= 0
+		return string(catalog.msgID(i)) >= msgid
 	})
-	if idx < catalog.numStrings && bytes.Equal(catalog.msgID(idx), msgid) {
+	if idx < catalog.numStrings && string(catalog.msgID(idx)) == msgid {
 		return idx, true
 	}
 	return 0, false

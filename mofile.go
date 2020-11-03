@@ -134,8 +134,52 @@ func (catalog *mocatalog) msgStr(idx, n int) []byte {
 	return msgstr
 }
 
+// hashString implements libintl's hash_string() algorithm
+func hashString(s string) uint32 {
+	const hashWordBits = 32
+	var hval, g uint32
+
+	for i := 0; i < len(s); i++ {
+		hval <<= 4
+		hval += uint32(s[i])
+		g = hval & (0xf << (hashWordBits - 4))
+		if g != 0 {
+			hval ^= g >> (hashWordBits - 8)
+			hval ^= g
+		}
+	}
+	return hval
+}
+
 func (catalog *mocatalog) msgIndex(msgid string) (idx int, ok bool) {
-	// perform a binary search over origTab message IDs
+	// Use the hash table if available
+	if catalog.hashTab != nil {
+		// Hash table lookup adapted from libintl's _nl_find_msg()
+		hval := hashString(msgid)
+		hashSize := uint32(len(catalog.hashTab) / 4)
+		idx := hval % hashSize
+		incr := 1 + (hval % (hashSize - 2))
+
+		for {
+			nstr := catalog.order.Uint32(catalog.hashTab[4*idx:])
+			if nstr == 0 {
+				// Hash table entry is empty
+				return 0, false
+			}
+
+			nstr -= 1
+			if string(catalog.msgID(int(nstr))) == msgid {
+				return int(nstr), true
+			}
+			if idx >= hashSize-incr {
+				idx -= hashSize - incr
+			} else {
+				idx += incr
+			}
+		}
+	}
+
+	// Fall back to a binary search over origTab message IDs
 	idx = sort.Search(catalog.numStrings, func(i int) bool {
 		return string(catalog.msgID(i)) >= msgid
 	})

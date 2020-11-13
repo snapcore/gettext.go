@@ -50,28 +50,32 @@ func (t Translations) Preload(locales ...string) {
 	}
 }
 
-func (t Translations) load(locale string) {
+func (t Translations) load(locale string) Catalog {
+	if catalog, ok := t.cache[locale]; ok {
+		return catalog
+	}
+
+	t.cache[locale] = nil
 	path := t.resolver(t.root, locale, t.domain)
 	f, err := os.Open(path)
 	if err != nil {
-		t.cache[locale] = nullcatalog{}
-		return
+		return nil
 	}
 	defer f.Close()
 	catalog, err := ParseMO(f)
 	if err != nil {
-		t.cache[locale] = nullcatalog{}
-		return
+		return nil
 	}
 	t.cache[locale] = catalog
+	return catalog
 }
 
 // Locale returns the catalog translations for a given Locale. If the given
 // locale is not available, a NullCatalog is returned.
 func (t Translations) Locale(locale string) Catalog {
-	_, ok := t.cache[locale]
-	if !ok {
-		t.load(locale)
+	catalog := t.load(locale)
+	if catalog == nil {
+		catalog = nullcatalog{}
 	}
-	return t.cache[locale]
+	return catalog
 }

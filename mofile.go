@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"log"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/snapcore/go-gettext/pluralforms"
@@ -15,10 +15,13 @@ const le_magic = 0x950412de
 const be_magic = 0xde120495
 
 type header struct {
-	Version           uint32
-	NumStrings        uint32
-	MasterIndex       uint32
-	TranslationsIndex uint32
+	Magic          uint32
+	Version        uint32
+	NumStrings     uint32
+	OrigTabOffset  uint32
+	TransTabOffset uint32
+	HashTabSize    uint32
+	HashTabOffset  uint32
 }
 
 func (header header) get_major_version() uint32 {
@@ -36,11 +39,17 @@ type Catalog interface {
 }
 
 type mocatalog struct {
-	header      header
-	language    string
-	messages    map[string][]string
-	pluralforms pluralforms.Expression
+	m     *fileMapping
+	order binary.ByteOrder
+
+	numStrings int
+	origTab    []byte
+	transTab   []byte
+	hashTab    []byte
+
 	info        map[string]string
+	language    string
+	pluralforms pluralforms.Expression
 	charset     string
 }
 
@@ -58,83 +67,130 @@ func (catalog nullcatalog) NGettext(msgid string, msgid_plural string, n uint32)
 	}
 }
 
-func (catalog mocatalog) Gettext(msgid string) string {
-	msgstrs, ok := catalog.messages[msgid]
+func (catalog *mocatalog) Gettext(msgid string) string {
+	idx, ok := catalog.msgIndex(msgid)
 	if !ok {
 		return msgid
 	}
-	return msgstrs[0]
+	return string(catalog.msgStr(idx, 0))
 }
 
-func (catalog mocatalog) NGettext(msgid string, msgid_plural string, n uint32) string {
-	msgstrs, ok := catalog.messages[msgid]
+func (catalog *mocatalog) NGettext(msgid string, msgid_plural string, n uint32) string {
+	idx, ok := catalog.msgIndex(msgid)
 	if !ok {
 		if n == 1 {
 			return msgid
 		} else {
 			return msgid_plural
 		}
+	}
+
+	var plural int
+	if catalog.pluralforms != nil {
+		plural = catalog.pluralforms.Eval(n)
 	} else {
-		/* Bogus/missing pluralforms in mo */
-		if catalog.pluralforms == nil {
-			/* Use the Germanic plural rule.  */
-			if n == 1 {
-				return msgstrs[0]
+		// Bogus/missing pluralforms in mo: Use the Germanic
+		// plural rule.
+		if n == 1 {
+			plural = 0
+		} else {
+			plural = 1
+		}
+	}
+
+	return string(catalog.msgStr(idx, plural))
+}
+
+func (catalog *mocatalog) msgID(idx int) []byte {
+	strLen := catalog.order.Uint32(catalog.origTab[8*idx:])
+	strOffset := catalog.order.Uint32(catalog.origTab[8*idx+4:])
+	msgid := catalog.m.data[strOffset : strOffset+strLen]
+
+	zero := bytes.IndexByte(msgid, '\x00')
+	if zero >= 0 {
+		msgid = msgid[:zero]
+	}
+	return msgid
+}
+
+func (catalog *mocatalog) msgStr(idx, n int) []byte {
+	strLen := catalog.order.Uint32(catalog.transTab[8*idx:])
+	strOffset := catalog.order.Uint32(catalog.transTab[8*idx+4:])
+	msgstr := catalog.m.data[strOffset : strOffset+strLen]
+
+	for ; n >= 0; n-- {
+		zero := bytes.IndexByte(msgstr, '\x00')
+		if n == 0 {
+			if zero >= 0 {
+				msgstr = msgstr[:zero]
+			}
+			break
+		} else {
+			// fast forward to next string.  If there is
+			// no nul byte, then this is a no-op
+			msgstr = msgstr[zero+1:]
+		}
+	}
+	return msgstr
+}
+
+// hashString implements libintl's hash_string() algorithm
+func hashString(s string) uint32 {
+	const hashWordBits = 32
+	var hval, g uint32
+
+	for i := 0; i < len(s); i++ {
+		hval <<= 4
+		hval += uint32(s[i])
+		g = hval & (0xf << (hashWordBits - 4))
+		if g != 0 {
+			hval ^= g >> (hashWordBits - 8)
+			hval ^= g
+		}
+	}
+	return hval
+}
+
+func (catalog *mocatalog) msgIndex(msgid string) (idx int, ok bool) {
+	// Use the hash table if available
+	if catalog.hashTab != nil {
+		// Hash table lookup adapted from libintl's _nl_find_msg()
+		hval := hashString(msgid)
+		hashSize := uint32(len(catalog.hashTab) / 4)
+		idx := hval % hashSize
+		incr := 1 + (hval % (hashSize - 2))
+
+		for {
+			nstr := catalog.order.Uint32(catalog.hashTab[4*idx:])
+			if nstr == 0 {
+				// Hash table entry is empty
+				return 0, false
+			}
+
+			nstr -= 1
+			if string(catalog.msgID(int(nstr))) == msgid {
+				return int(nstr), true
+			}
+			if idx >= hashSize-incr {
+				idx -= hashSize - incr
 			} else {
-				return msgstrs[1]
+				idx += incr
 			}
 		}
+	}
 
-		index := catalog.pluralforms.Eval(n)
-		if index > len(msgstrs) {
-			if n == 1 {
-				return msgid
-			} else {
-				return msgid_plural
-			}
-		}
-		return msgstrs[index]
+	// Fall back to a binary search over origTab message IDs
+	idx = sort.Search(catalog.numStrings, func(i int) bool {
+		return string(catalog.msgID(i)) >= msgid
+	})
+	if idx < catalog.numStrings && string(catalog.msgID(idx)) == msgid {
+		return idx, true
 	}
-}
-
-type len_offset struct {
-	Len uint32
-	Off uint32
-}
-
-func read_len_off(index uint32, file *os.File, order binary.ByteOrder) (len_offset, error) {
-	lenoff := len_offset{}
-	buf := make([]byte, 8)
-	_, err := file.Seek(int64(index), os.SEEK_SET)
-	if err != nil {
-		return lenoff, err
-	}
-	_, err = file.Read(buf)
-	if err != nil {
-		return lenoff, err
-	}
-	buffer := bytes.NewBuffer(buf)
-	err = binary.Read(buffer, order, &lenoff)
-	if err != nil {
-		return lenoff, err
-	}
-	return lenoff, nil
-}
-
-func read_message(file *os.File, lenoff len_offset) (string, error) {
-	_, err := file.Seek(int64(lenoff.Off), os.SEEK_SET)
-	if err != nil {
-		return "", err
-	}
-	buf := make([]byte, lenoff.Len)
-	_, err = file.Read(buf)
-	if err != nil {
-		return "", err
-	}
-	return string(buf), nil
+	return 0, false
 }
 
 func (catalog *mocatalog) read_info(info string) error {
+	catalog.info = make(map[string]string)
 	lastk := ""
 	for _, line := range strings.Split(info, "\n") {
 		item := strings.TrimSpace(line)
@@ -167,80 +223,111 @@ func (catalog *mocatalog) read_info(info string) error {
 	return nil
 }
 
+func validateStringTable(m *fileMapping, table []byte, numStrings int, order binary.ByteOrder) error {
+	for i := 0; i < numStrings; i++ {
+		strLen := order.Uint32(table[8*i:])
+		strOffset := order.Uint32(table[8*i+4:])
+		if int(strLen+strOffset) > len(m.data) {
+			return fmt.Errorf("string %d data (len=%x, offset=%x) is out of bounds", i, strLen, strOffset)
+		}
+	}
+	return nil
+}
+
+func validateHashTable(table []byte, numStrings int, order binary.ByteOrder) error {
+	for i := 0; i < numStrings; i++ {
+		strIndex := order.Uint32(table[4*i:])
+		// hash entries are either zero or a string index
+		// incremented by one
+		if int(strIndex) >= numStrings+1 {
+			return fmt.Errorf("hash table is corrupt")
+		}
+	}
+	return nil
+}
+
 // ParseMO parses a mo file into a Catalog if possible.
 func ParseMO(file *os.File) (Catalog, error) {
-	var order binary.ByteOrder
-	header := header{}
-	catalog := mocatalog{
-		header:   header,
-		info:     make(map[string]string),
-		messages: make(map[string][]string),
-	}
-	magic := make([]byte, 4)
-	_, err := file.Read(magic)
+	m, err := openMapping(file)
 	if err != nil {
-		return catalog, err
+		return nil, err
 	}
-	magic_number := binary.LittleEndian.Uint32(magic)
-	switch magic_number {
+	defer func() {
+		if m != nil {
+			m.Close()
+		}
+	}()
+
+	var header header
+	headerSize := binary.Size(&header)
+	if len(m.data) < headerSize {
+		return nil, fmt.Errorf("message catalogue is too short")
+	}
+
+	var order binary.ByteOrder = binary.LittleEndian
+	magic := order.Uint32(m.data)
+	switch magic {
 	case le_magic:
-		order = binary.LittleEndian
+		// nothing
 	case be_magic:
 		order = binary.BigEndian
 	default:
-		return catalog, fmt.Errorf("Wrong magic %d", magic_number)
+		return nil, fmt.Errorf("Wrong magic: %d", magic)
 	}
-	raw_headers := make([]byte, 32)
-	_, err = file.Read(raw_headers)
-	if err != nil {
-		return catalog, err
+	if err := binary.Read(bytes.NewBuffer(m.data[:headerSize]), order, &header); err != nil {
+		return nil, err
 	}
-	buffer := bytes.NewBuffer(raw_headers)
-	err = binary.Read(buffer, order, &header)
-	if err != nil {
-		return catalog, err
+	if header.get_major_version() != 0 && header.get_major_version() != 1 {
+		return nil, fmt.Errorf("Unsupported version: %d.%d", header.get_major_version(), header.get_minor_version())
 	}
-	if (header.get_major_version() != 0) && (header.get_major_version() != 1) {
-		log.Printf("major %d minor %d", header.get_major_version(), header.get_minor_version())
-		return catalog, fmt.Errorf("Unsupported version: %d.%d", header.get_major_version(), header.get_minor_version())
+	if int64(int(header.NumStrings)) != int64(header.NumStrings) {
+		return nil, fmt.Errorf("too many strings in catalog")
 	}
-	current_master_index := header.MasterIndex
-	current_transl_index := header.TranslationsIndex
-	var index uint32 = 0
-	for ; index < header.NumStrings; index++ {
-		mlenoff, err := read_len_off(current_master_index, file, order)
-		if err != nil {
-			return catalog, err
-		}
-		tlenoff, err := read_len_off(current_transl_index, file, order)
-		if err != nil {
-			return catalog, err
-		}
-		msgid, err := read_message(file, mlenoff)
-		if err != nil {
-			return catalog, nil
-		}
-		msgstr, err := read_message(file, tlenoff)
-		if err != nil {
-			return catalog, err
-		}
-		if mlenoff.Len == 0 {
-			err = catalog.read_info(msgstr)
-			if err != nil {
-				return catalog, err
-			}
-		}
-		if strings.Contains(msgid, "\x00") {
-			// Plural!
-			msgidsingular := strings.Split(msgid, "\x00")[0]
-			translations := strings.Split(msgstr, "\x00")
-			catalog.messages[msgidsingular] = translations
-		} else {
-			catalog.messages[msgid] = []string{msgstr}
-		}
+	numStrings := int(header.NumStrings)
 
-		current_master_index += 8
-		current_transl_index += 8
+	if int(header.OrigTabOffset+8*header.NumStrings) > len(m.data) {
+		return nil, fmt.Errorf("original strings table out of bounds")
 	}
+	origTab := m.data[header.OrigTabOffset : header.OrigTabOffset+8*header.NumStrings]
+	if err := validateStringTable(m, origTab, numStrings, order); err != nil {
+		return nil, err
+	}
+
+	if int(header.TransTabOffset+8*header.NumStrings) > len(m.data) {
+		return nil, fmt.Errorf("translated strings table out of bounds")
+	}
+	transTab := m.data[header.TransTabOffset : header.TransTabOffset+8*header.NumStrings]
+	if err := validateStringTable(m, transTab, numStrings, order); err != nil {
+		return nil, err
+	}
+
+	var hashTab []byte
+	if header.HashTabSize > 2 {
+		if int(header.HashTabOffset+4*header.HashTabSize) > len(m.data) {
+			return nil, fmt.Errorf("hash table out of bounds")
+		}
+		hashTab = m.data[header.HashTabOffset : header.HashTabOffset+4*header.HashTabSize]
+		if err := validateHashTable(hashTab, numStrings, order); err != nil {
+			return nil, err
+		}
+	}
+
+	catalog := &mocatalog{
+		m:     m,
+		order: order,
+
+		numStrings: numStrings,
+		origTab:    origTab,
+		transTab:   transTab,
+		hashTab:    hashTab,
+	}
+	// Read catalog header if available
+	if catalog.numStrings > 0 && len(catalog.msgID(0)) == 0 {
+		if err := catalog.read_info(string(catalog.msgStr(0, 0))); err != nil {
+			return nil, err
+		}
+	}
+
+	m = nil
 	return catalog, nil
 }

@@ -155,6 +155,27 @@ func TestPreload(t *testing.T) {
 	)
 }
 
+func TestUserLocale(t *testing.T) {
+	translations := NewTranslations("testdata/", "messages", my_resolver)
+
+	restore := mockGetenv(map[string]string{
+		"LANGUAGE": "fr_FR:ja_JP:en",
+	})
+	defer restore()
+
+	// The first available catalog is returned
+	cat := translations.UserLocale()
+	assert_equal(t, cat.Gettext("greeting"), "こんいちは")
+
+	// If no matches are found, a NULL catalog is returned
+	restore = mockGetenv(map[string]string{
+		"LANGUAGE": "de_DE",
+	})
+	defer restore()
+	cat = translations.UserLocale()
+	assert_equal(t, cat.Gettext("greeting"), "greeting")
+}
+
 func po_resolver(root string, locale string, domain string) string {
 	return path.Join(root, locale, fmt.Sprintf("%s.po", domain))
 }

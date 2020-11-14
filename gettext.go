@@ -79,3 +79,13 @@ func (t Translations) Locale(locale string) Catalog {
 	}
 	return catalog
 }
+
+func (t Translations) UserLocale() Catalog {
+	for _, locale := range UserLanguages() {
+		catalog := t.load(locale)
+		if catalog != nil {
+			return catalog
+		}
+	}
+	return nullcatalog{}
+}

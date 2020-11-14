@@ -6,11 +6,15 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"sync"
 )
 
 // Translations holds the translations in the different locales your app
 // supports. Use NewTranslations to create an instance.
 type Translations struct {
+	// Normally this mutex would be embedded in the struct, but
+	// the existing API has the struct copied by value
+	mu       *sync.Mutex
 	cache    map[string]Catalog
 	root     string
 	domain   string
@@ -38,6 +42,7 @@ func NewTranslations(root string, domain string, resolver PathResolver) Translat
 		resolver: resolver,
 		domain:   domain,
 		cache:    map[string]Catalog{},
+		mu:       &sync.Mutex{},
 	}
 }
 
@@ -51,6 +56,9 @@ func (t Translations) Preload(locales ...string) {
 }
 
 func (t Translations) load(locale string) Catalog {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	if catalog, ok := t.cache[locale]; ok {
 		return catalog
 	}

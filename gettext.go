@@ -12,9 +12,15 @@ import (
 // Translations holds the translations in the different locales your app
 // supports. Use NewTranslations to create an instance.
 type Translations struct {
-	// Normally this mutex would be embedded in the struct, but
-	// the existing API has the struct copied by value
-	mu       *sync.Mutex
+	// Ideally NewTranslations would return a *Translations
+	// pointer.  As we don't want the mutex protecting the catalog
+	// cache to be copied, we embed a pointer to an ancillary
+	// struct holding our data.
+	*translations
+}
+
+type translations struct {
+	mu       sync.Mutex
 	cache    map[string]Catalog
 	root     string
 	domain   string
@@ -37,13 +43,12 @@ func DefaultResolver(root string, locale string, domain string) string {
 // If your structure is <root>/<locale>/LC_MESSAGES/<domain>.mo, you can use
 // DefaultResolver.
 func NewTranslations(root string, domain string, resolver PathResolver) Translations {
-	return Translations{
+	return Translations{&translations{
 		root:     root,
 		resolver: resolver,
 		domain:   domain,
 		cache:    map[string]Catalog{},
-		mu:       &sync.Mutex{},
-	}
+	}}
 }
 
 // Preload a list of locales (if they're available). This is useful if you want

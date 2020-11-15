@@ -80,6 +80,19 @@ func TestRealTranslations(t *testing.T) {
 	)
 }
 
+func TestFallbackCatalog(t *testing.T) {
+	translations := NewTranslations("testdata/", "messages", my_resolver)
+	cat := translations.Locale("en_AU", "en")
+	// A translation from en_AU
+	assert_equal(t, cat.Gettext("greeting"), "G'day")
+	// A translation from en
+	assert_equal(t, cat.NGettext("order %d beer", "order %d beers", 0), "%d beers please")
+
+	// Loading the catalogs in the other order shadows the en_AU string
+	cat = translations.Locale("en", "en_AU")
+	assert_equal(t, cat.Gettext("greeting"), "Hello")
+}
+
 func TestPreload(t *testing.T) {
 	dir, err := ioutil.TempDir("", "gogettext")
 	if err != nil {

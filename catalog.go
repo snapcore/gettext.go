@@ -1,10 +1,12 @@
 package gettext
 
 // Catalog of translations for a given locale.
-type Catalog []*mocatalog
+type Catalog struct {
+	mos []*mocatalog
+}
 
 func (c Catalog) findMsg(msgid string, usePlural bool, n uint32) (msgstr string, ok bool) {
-	for _, mo := range c {
+	for _, mo := range c.mos {
 		if msgstr, ok := mo.findMsg(msgid, usePlural, n); ok {
 			return msgstr, true
 		}

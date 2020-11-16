@@ -86,14 +86,14 @@ func (t Translations) load(locale string) *mocatalog {
 // Locale returns the catalog translations for a given Locale. If the given
 // locale is not available, a NullCatalog is returned.
 func (t Translations) Locale(languages ...string) Catalog {
-	var c Catalog
+	var mos []*mocatalog
 	for _, lang := range normalizeLanguages(languages) {
 		mo := t.load(lang)
 		if mo != nil {
-			c = append(c, mo)
+			mos = append(mos, mo)
 		}
 	}
-	return c
+	return Catalog{mos}
 }
 
 // UserLocale returns the catalog translations for the user's Locale.

@@ -218,9 +218,9 @@ func validateHashTable(table []byte, numStrings int, order binary.ByteOrder) err
 func ParseMO(file *os.File) (Catalog, error) {
 	mo, err := parseMO(file)
 	if err != nil {
-		return nil, err
+		return Catalog{}, err
 	}
-	return Catalog{mo}, nil
+	return Catalog{[]*mocatalog{mo}}, nil
 }
 
 func parseMO(file *os.File) (*mocatalog, error) {

@@ -93,6 +93,7 @@ func (t Translations) Locale(locale string) Catalog {
 	return catalog
 }
 
+// UserLocale returns the catalog translations for the user's Locale.
 func (t Translations) UserLocale() Catalog {
 	for _, locale := range UserLanguages() {
 		catalog := t.load(locale)

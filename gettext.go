@@ -83,8 +83,11 @@ func (t Translations) load(locale string) *mocatalog {
 	return catalog
 }
 
-// Locale returns the catalog translations for a given Locale. If the given
-// locale is not available, a NullCatalog is returned.
+// Locale returns the catalog translations for a list of locales.
+//
+// If translations are not found in the first locale, the each
+// subsequent one is consulted until a match is found.  If no match is
+// found, the original strings are returned.
 func (t Translations) Locale(languages ...string) Catalog {
 	var mos []*mocatalog
 	for _, lang := range normalizeLanguages(languages) {

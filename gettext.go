@@ -95,7 +95,7 @@ func (t Translations) Locale(locale string) Catalog {
 
 // UserLocale returns the catalog translations for the user's Locale.
 func (t Translations) UserLocale() Catalog {
-	for _, locale := range UserLanguages() {
+	for _, locale := range normalizeLanguages(UserLanguages()) {
 		catalog := t.load(locale)
 		if catalog != nil {
 			return catalog

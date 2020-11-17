@@ -148,11 +148,37 @@ func expandLocale(locale string) (locales []string) {
 	return locales
 }
 
+// normalizeLanguages expands a list of locales to include fallbacks
+// and remove duplicates.
+func normalizeLanguages(locales []string) []string {
+	var result []string
+	seen := make(map[string]bool)
+	for _, singleLocale := range locales {
+		for _, locale := range expandLocale(singleLocale) {
+			if locale == "C" || locale == "POSIX" {
+				// These special locales identifiers
+				// indicate no translation.  We don't
+				// include them in the list, and
+				// ignore any further locales.
+				return result
+			}
+			if seen[locale] {
+				continue
+			}
+			seen[locale] = true
+			result = append(result, locale)
+		}
+	}
+	return result
+}
+
 var osGetenv = os.Getenv
 
-// localeFromEnv returns the locales set in the environment
-// This lookup is based on the logic of libintl's guess_category_value()
-func localeFromEnv() []string {
+// UserLanguages returns a list of the user's preferred languages
+//
+// These are in the form of POSIX locale identifiers.  This lookup is
+// based on the logic of libintl's guess_category_value()
+func UserLanguages() []string {
 	// libintl uses $LANGUAGE by default as a colon-separated list
 	// of locale names.
 	locale := osGetenv("LANGUAGE")
@@ -173,28 +199,4 @@ func localeFromEnv() []string {
 	// libintl also includes some platform specific fallbacks for
 	// Windows and MacOS that we have not implemented.
 	return nil
-}
-
-// UserLanguages returns a list of the user's preferred languages
-//
-// These are in the form of POSIX locale identifiers.
-func UserLanguages() []string {
-	var locales []string
-	seen := make(map[string]bool)
-	for _, singleLocale := range localeFromEnv() {
-		if singleLocale == "C" || singleLocale == "POSIX" {
-			// These special locales identifiers indicate
-			// no translation.  We don't include them in
-			// the list, and ignore any further locales.
-			return locales
-		}
-		for _, locale := range expandLocale(singleLocale) {
-			if seen[locale] {
-				continue
-			}
-			seen[locale] = true
-			locales = append(locales, locale)
-		}
-	}
-	return locales
 }

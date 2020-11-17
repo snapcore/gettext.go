@@ -52,36 +52,36 @@ func mockGetenv(env map[string]string) (restore func()) {
 	}
 }
 
-func TestLocaleFromEnvironment(t *testing.T) {
+func TestUserLanguages(t *testing.T) {
 	env := map[string]string{}
 	restore := mockGetenv(env)
 	defer restore()
 
 	// By default, no locale is set
-	assertDeepEqual(t, localeFromEnv(), []string(nil))
+	assertDeepEqual(t, UserLanguages(), []string(nil))
 
 	// If LANG is set, use that
 	env["LANG"] = "en_AU@lang"
-	assertDeepEqual(t, localeFromEnv(), []string{"en_AU@lang"})
+	assertDeepEqual(t, UserLanguages(), []string{"en_AU@lang"})
 
 	// LC_MESSAGES overrides LANG
 	env["LC_MESSAGES"] = "en_AU@messages"
-	assertDeepEqual(t, localeFromEnv(), []string{"en_AU@messages"})
+	assertDeepEqual(t, UserLanguages(), []string{"en_AU@messages"})
 
 	// LC_ALL overrides LC_MESSAGES
 	env["LC_ALL"] = "en_AU.UTF-8"
-	assertDeepEqual(t, localeFromEnv(), []string{"en_AU.UTF-8"})
+	assertDeepEqual(t, UserLanguages(), []string{"en_AU.UTF-8"})
 
 	// LANGUAGE overrides LC_ALL, and can specify multiple locales
 	env["LANGUAGE"] = "en_AU:en_GB:en"
-	assertDeepEqual(t, localeFromEnv(), []string{"en_AU", "en_GB", "en"})
+	assertDeepEqual(t, UserLanguages(), []string{"en_AU", "en_GB", "en"})
 }
 
-func TestUserLanguages(t *testing.T) {
+func TestNormalizeLanguages(t *testing.T) {
 	restore := mockGetenv(map[string]string{
 		"LANGUAGE": "en_AU:en_GB:en:C:fr",
 	})
 	defer restore()
 
-	assertDeepEqual(t, UserLanguages(), []string{"en_AU", "en", "en_GB"})
+	assertDeepEqual(t, normalizeLanguages([]string{"en_AU", "en_GB", "en", "C", "fr"}), []string{"en_AU", "en", "en_GB"})
 }

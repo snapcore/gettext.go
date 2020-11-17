@@ -6,11 +6,21 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"sync"
 )
 
 // Translations holds the translations in the different locales your app
 // supports. Use NewTranslations to create an instance.
 type Translations struct {
+	// Ideally NewTranslations would return a *Translations
+	// pointer.  As we don't want the mutex protecting the catalog
+	// cache to be copied, we embed a pointer to an ancillary
+	// struct holding our data.
+	*translations
+}
+
+type translations struct {
+	mu       sync.Mutex
 	cache    map[string]Catalog
 	root     string
 	domain   string
@@ -33,12 +43,12 @@ func DefaultResolver(root string, locale string, domain string) string {
 // If your structure is <root>/<locale>/LC_MESSAGES/<domain>.mo, you can use
 // DefaultResolver.
 func NewTranslations(root string, domain string, resolver PathResolver) Translations {
-	return Translations{
+	return Translations{&translations{
 		root:     root,
 		resolver: resolver,
 		domain:   domain,
 		cache:    map[string]Catalog{},
-	}
+	}}
 }
 
 // Preload a list of locales (if they're available). This is useful if you want
@@ -50,28 +60,46 @@ func (t Translations) Preload(locales ...string) {
 	}
 }
 
-func (t Translations) load(locale string) {
+func (t Translations) load(locale string) Catalog {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if catalog, ok := t.cache[locale]; ok {
+		return catalog
+	}
+
+	t.cache[locale] = nil
 	path := t.resolver(t.root, locale, t.domain)
 	f, err := os.Open(path)
 	if err != nil {
-		t.cache[locale] = nullcatalog{}
-		return
+		return nil
 	}
 	defer f.Close()
 	catalog, err := ParseMO(f)
 	if err != nil {
-		t.cache[locale] = nullcatalog{}
-		return
+		return nil
 	}
 	t.cache[locale] = catalog
+	return catalog
 }
 
 // Locale returns the catalog translations for a given Locale. If the given
 // locale is not available, a NullCatalog is returned.
 func (t Translations) Locale(locale string) Catalog {
-	_, ok := t.cache[locale]
-	if !ok {
-		t.load(locale)
+	catalog := t.load(locale)
+	if catalog == nil {
+		catalog = nullcatalog{}
 	}
-	return t.cache[locale]
+	return catalog
+}
+
+// UserLocale returns the catalog translations for the user's Locale.
+func (t Translations) UserLocale() Catalog {
+	for _, locale := range normalizeLanguages(UserLanguages()) {
+		catalog := t.load(locale)
+		if catalog != nil {
+			return catalog
+		}
+	}
+	return nullcatalog{}
 }

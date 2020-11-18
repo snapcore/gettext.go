@@ -8,8 +8,16 @@ import (
 	"testing"
 )
 
+func TestNewTranslations(t *testing.T) {
+	// The result of NewTranslations can be assigned to a variable
+	// using the deprecated Translations alias.
+	var trans Translations = NewTranslations("localeDir", "domain", DefaultResolver)
+	assert_equal(t, trans.Name, "domain")
+	assert_equal(t, trans.LocaleDir, "localeDir")
+}
+
 func TestNullTranslations(t *testing.T) {
-	translations := NewTranslations(".", "messages", DefaultResolver)
+	translations := &TextDomain{Name: "messages", LocaleDir: "."}
 	en := translations.Locale("en")
 	en_gettext := en.Gettext("mymsgid")
 	assert_equal(t, en_gettext, "mymsgid")
@@ -81,7 +89,7 @@ func TestRealTranslations(t *testing.T) {
 }
 
 func TestFallbackCatalog(t *testing.T) {
-	translations := NewTranslations("testdata/", "messages", my_resolver)
+	translations := &TextDomain{Name: "messages", LocaleDir: "testdata/", PathResolver: my_resolver}
 	cat := translations.Locale("en_AU", "en")
 	// A translation from en_AU
 	assert_equal(t, cat.Gettext("greeting"), "G'day")
@@ -126,7 +134,7 @@ func TestPreload(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	translations := NewTranslations(dir, "messages", DefaultResolver)
+	translations := &TextDomain{Name: "messages", LocaleDir: dir}
 	translations.Preload("en")
 	err = os.Remove(path.Join(dir, "en", "LC_MESSAGES", "messages.mo"))
 	if err != nil {
@@ -169,7 +177,7 @@ func TestPreload(t *testing.T) {
 }
 
 func TestUserLocale(t *testing.T) {
-	translations := NewTranslations("testdata/", "messages", my_resolver)
+	translations := &TextDomain{Name: "messages", LocaleDir: "testdata/", PathResolver: my_resolver}
 
 	restore := mockGetenv(map[string]string{
 		"LANGUAGE": "fr_FR:ja_JP:en",
@@ -194,7 +202,7 @@ func po_resolver(root string, locale string, domain string) string {
 }
 
 func TestNotMoFile(t *testing.T) {
-	translations := NewTranslations("testdata/", "messages", po_resolver)
+	translations := &TextDomain{Name: "messages", LocaleDir: "testdata/", PathResolver: po_resolver}
 	en := translations.Locale("en")
 	assert_equal(t, en.Gettext("greeting"), "greeting")
 	assert_equal(t,

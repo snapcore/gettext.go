@@ -3,7 +3,6 @@
 package gettext
 
 import (
-	"fmt"
 	"os"
 	"path"
 	"sync"
@@ -28,12 +27,26 @@ type translations struct {
 }
 
 // PathResolver resolves a path to a mo file
-type PathResolver func(root string, locale string, domain string) string
+type PathResolver func(root, locale, domain string) string
 
 // DefaultResolver resolves paths in the standard format of:
 // <root>/<locale>/LC_MESSAGES/<domain>.mo
-func DefaultResolver(root string, locale string, domain string) string {
-	return path.Join(root, locale, "LC_MESSAGES", fmt.Sprintf("%s.mo", domain))
+func DefaultResolver(root, locale, domain string) string {
+	return path.Join(root, locale, "LC_MESSAGES", domain+".mo")
+}
+
+// LangpackResolver is a PathResolver that uses language pack catalogs
+// if available.
+//
+// If a catalog is available under /usr/share/locale-langpack, it is
+// used in preference to the one found under the specified root
+// directory.
+func LangpackResolver(root, locale, domain string) string {
+	langpack := path.Join("/usr/share/locale-langpack", locale, "LC_MESSAGES", domain+".mo")
+	if _, err := os.Stat(langpack); err == nil {
+		return langpack
+	}
+	return DefaultResolver(root, locale, domain)
 }
 
 // NewTranslations is the main entry point for gogettext. Use this to set up

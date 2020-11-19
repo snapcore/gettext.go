@@ -32,12 +32,6 @@ func (header header) get_minor_version() uint32 {
 	return header.Version & 0xffff
 }
 
-// Catalog of translations for a given locale.
-type Catalog interface {
-	Gettext(msgid string) string
-	NGettext(msgid string, msgid_plural string, n uint32) string
-}
-
 type mocatalog struct {
 	m     *fileMapping
 	order binary.ByteOrder
@@ -53,52 +47,26 @@ type mocatalog struct {
 	charset     string
 }
 
-type nullcatalog struct{}
-
-func (catalog nullcatalog) Gettext(msgid string) string {
-	return msgid
-}
-
-func (catalog nullcatalog) NGettext(msgid string, msgid_plural string, n uint32) string {
-	if n == 1 {
-		return msgid
-	} else {
-		return msgid_plural
-	}
-}
-
-func (catalog *mocatalog) Gettext(msgid string) string {
+func (catalog *mocatalog) findMsg(msgid string, usePlural bool, n uint32) (msgstr string, ok bool) {
 	idx, ok := catalog.msgIndex(msgid)
 	if !ok {
-		return msgid
+		return "", false
 	}
-	return string(catalog.msgStr(idx, 0))
-}
-
-func (catalog *mocatalog) NGettext(msgid string, msgid_plural string, n uint32) string {
-	idx, ok := catalog.msgIndex(msgid)
-	if !ok {
-		if n == 1 {
-			return msgid
-		} else {
-			return msgid_plural
-		}
-	}
-
 	var plural int
-	if catalog.pluralforms != nil {
-		plural = catalog.pluralforms.Eval(n)
-	} else {
-		// Bogus/missing pluralforms in mo: Use the Germanic
-		// plural rule.
-		if n == 1 {
-			plural = 0
+	if usePlural {
+		if catalog.pluralforms != nil {
+			plural = catalog.pluralforms.Eval(n)
 		} else {
-			plural = 1
+			// Bogus/missing pluralforms in mo: Use the Germanic
+			// plural rule.
+			if n == 1 {
+				plural = 0
+			} else {
+				plural = 1
+			}
 		}
 	}
-
-	return string(catalog.msgStr(idx, plural))
+	return string(catalog.msgStr(idx, plural)), true
 }
 
 func (catalog *mocatalog) msgID(idx int) []byte {
@@ -248,6 +216,14 @@ func validateHashTable(table []byte, numStrings int, order binary.ByteOrder) err
 
 // ParseMO parses a mo file into a Catalog if possible.
 func ParseMO(file *os.File) (Catalog, error) {
+	mo, err := parseMO(file)
+	if err != nil {
+		return Catalog{}, err
+	}
+	return Catalog{[]*mocatalog{mo}}, nil
+}
+
+func parseMO(file *os.File) (*mocatalog, error) {
 	m, err := openMapping(file)
 	if err != nil {
 		return nil, err

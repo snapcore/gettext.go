@@ -21,7 +21,7 @@ type Translations struct {
 
 type translations struct {
 	mu       sync.Mutex
-	cache    map[string]Catalog
+	cache    map[string]*mocatalog
 	root     string
 	domain   string
 	resolver PathResolver
@@ -47,7 +47,7 @@ func NewTranslations(root string, domain string, resolver PathResolver) Translat
 		root:     root,
 		resolver: resolver,
 		domain:   domain,
-		cache:    map[string]Catalog{},
+		cache:    map[string]*mocatalog{},
 	}}
 }
 
@@ -60,7 +60,7 @@ func (t Translations) Preload(locales ...string) {
 	}
 }
 
-func (t Translations) load(locale string) Catalog {
+func (t Translations) load(locale string) *mocatalog {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -75,7 +75,7 @@ func (t Translations) load(locale string) Catalog {
 		return nil
 	}
 	defer f.Close()
-	catalog, err := ParseMO(f)
+	catalog, err := parseMO(f)
 	if err != nil {
 		return nil
 	}
@@ -83,23 +83,23 @@ func (t Translations) load(locale string) Catalog {
 	return catalog
 }
 
-// Locale returns the catalog translations for a given Locale. If the given
-// locale is not available, a NullCatalog is returned.
-func (t Translations) Locale(locale string) Catalog {
-	catalog := t.load(locale)
-	if catalog == nil {
-		catalog = nullcatalog{}
+// Locale returns the catalog translations for a list of locales.
+//
+// If translations are not found in the first locale, the each
+// subsequent one is consulted until a match is found.  If no match is
+// found, the original strings are returned.
+func (t Translations) Locale(languages ...string) Catalog {
+	var mos []*mocatalog
+	for _, lang := range normalizeLanguages(languages) {
+		mo := t.load(lang)
+		if mo != nil {
+			mos = append(mos, mo)
+		}
 	}
-	return catalog
+	return Catalog{mos}
 }
 
 // UserLocale returns the catalog translations for the user's Locale.
 func (t Translations) UserLocale() Catalog {
-	for _, locale := range normalizeLanguages(UserLanguages()) {
-		catalog := t.load(locale)
-		if catalog != nil {
-			return catalog
-		}
-	}
-	return nullcatalog{}
+	return t.Locale(UserLanguages()...)
 }

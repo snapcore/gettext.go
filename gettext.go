@@ -15,10 +15,10 @@ import (
 // translations of those strings in various languages.
 type TextDomain struct {
 	// Name is the name of the text domain
-	Name         string
+	Name string
 	// LocaleDir is the base directory holding translations of the
 	// domain.  If it is empty, DefaultLocaleDir will be used.
-	LocaleDir    string
+	LocaleDir string
 	// PathResolver is called to determine the path of a
 	// particular locale's translations.  If it is nil then
 	// DefaultResolver will be used, which implements the standard
@@ -38,19 +38,6 @@ type PathResolver func(root string, locale string, domain string) string
 // <root>/<locale>/LC_MESSAGES/<domain>.mo
 func DefaultResolver(root string, locale string, domain string) string {
 	return path.Join(root, locale, "LC_MESSAGES", fmt.Sprintf("%s.mo", domain))
-}
-
-// Translations is a deprecated alias for a pointer to a TextDomain struct
-type Translations = *TextDomain
-
-// NewTranslations initialises a TextDomain struct, setting the Name,
-// LocaleDir and PathResolver fields.
-func NewTranslations(localeDir string, domain string, resolver PathResolver) *TextDomain {
-	return &TextDomain{
-		Name:         domain,
-		LocaleDir:    localeDir,
-		PathResolver: resolver,
-	}
 }
 
 // Preload a list of locales (if they're available). This is useful if you want
@@ -116,4 +103,22 @@ func (t *TextDomain) Locale(languages ...string) Catalog {
 // UserLocale returns the catalog translations for the user's Locale.
 func (t *TextDomain) UserLocale() Catalog {
 	return t.Locale(UserLanguages()...)
+}
+
+// Translations is an alias for a TextDomain pointer
+//
+// Deprecated: this type alias is provided for backwards
+// compatibility.  New code should use TextDomain directly.
+type Translations = *TextDomain
+
+// NewTranslations initialises a TextDomain struct, setting the Name,
+// LocaleDir and PathResolver fields.
+//
+// Deprecated: New code should initialise TextDomain directly.
+func NewTranslations(localeDir, domain string, resolver PathResolver) Translations {
+	return &TextDomain{
+		Name:         domain,
+		LocaleDir:    localeDir,
+		PathResolver: resolver,
+	}
 }

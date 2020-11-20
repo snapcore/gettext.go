@@ -32,3 +32,21 @@ func (c Catalog) NGettext(msgid, msgid_plural string, n uint32) string {
 	}
 	return msgid_plural
 }
+
+func (c Catalog) PGettext(msgctxt, msgid string) string {
+	if msgstr, ok := c.findMsg(msgctxt+"\x04"+msgid, false, 0); ok {
+		return msgstr
+	}
+	return msgid
+}
+
+func (c Catalog) PNGettext(msgctxt, msgid, msgid_plural string, n uint32) string {
+	if msgstr, ok := c.findMsg(msgctxt+"\x04"+msgid, true, n); ok {
+		return msgstr
+	}
+	// Fallback to original message based on Germanic plural rule.
+	if n == 1 {
+		return msgid
+	}
+	return msgid_plural
+}

@@ -23,3 +23,20 @@ jobs:
         run: go build .
       - name: Test
         run: go test -v ./...
+
+  static:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-go@v2
+        with:
+          go-version: '^1.13.0' # Latest 1.x release >= 1.13
+      - uses: actions/checkout@v2
+      - name: Check formatting
+        run: |
+          go fmt ./...
+          git diff --exit-code
+      - name: Check generated files
+        run: |
+          go generate -x ./...
+          go mod tidy
+          git diff --exit-code

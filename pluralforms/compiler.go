@@ -1,6 +1,6 @@
 package pluralforms
 
-//go:generate goyacc -o parser.go -v "" parser.y
+//go:generate go run golang.org/x/tools/cmd/goyacc -o parser.go -v "" parser.y
 
 import (
 	"fmt"

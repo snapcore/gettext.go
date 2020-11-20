@@ -54,17 +54,7 @@ func (catalog *mocatalog) findMsg(msgid string, usePlural bool, n uint32) (msgst
 	}
 	var plural int
 	if usePlural {
-		if catalog.pluralforms != nil {
-			plural = catalog.pluralforms.Eval(n)
-		} else {
-			// Bogus/missing pluralforms in mo: Use the Germanic
-			// plural rule.
-			if n == 1 {
-				plural = 0
-			} else {
-				plural = 1
-			}
-		}
+		plural = catalog.pluralforms.Eval(n)
 	}
 	return string(catalog.msgStr(idx, plural)), true
 }
@@ -296,6 +286,8 @@ func parseMO(file *os.File) (*mocatalog, error) {
 		origTab:    origTab,
 		transTab:   transTab,
 		hashTab:    hashTab,
+
+		pluralforms: pluralforms.GermanicPlural,
 	}
 	// Read catalog header if available
 	if catalog.numStrings > 0 && len(catalog.msgID(0)) == 0 {

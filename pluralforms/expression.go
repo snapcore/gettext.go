@@ -130,3 +130,14 @@ type varExpr struct{}
 func (e varExpr) Eval(n uint32) int {
 	return int(n)
 }
+
+type germanicPlural struct{}
+
+func (e germanicPlural) Eval(n uint32) int {
+	return logic(n != 1)
+}
+
+// GermanicPlural implements the plural rule of Germanic languages.
+//
+// This is Gettext's default for catalogs that don't specify a rule.
+var GermanicPlural germanicPlural

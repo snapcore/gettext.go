@@ -124,3 +124,14 @@ func TestParserFailures(t *testing.T) {
 		}
 	}
 }
+
+func TestGermanicPlural(t *testing.T) {
+	// GermanicPlural is an Expression
+	var expr Expression = GermanicPlural
+	assertEqual(t, expr.Eval(0), 1)
+	assertEqual(t, expr.Eval(1), 0)
+	assertEqual(t, expr.Eval(2), 1)
+	assertEqual(t, expr.Eval(3), 1)
+	assertEqual(t, expr.Eval(4), 1)
+	assertEqual(t, expr.Eval(5), 1)
+}

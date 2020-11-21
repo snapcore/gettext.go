@@ -97,10 +97,10 @@ func TestMessageContext(t *testing.T) {
 	assert_equal(t, es.PGettext("weapon", "bow"), "arco")
 
 	// A context can be used for ngettext style lookups too.
-	assert_equal(t, es.PNGettext("knot", "%d bow", "%d bows", 1), "%d lazo")
-	assert_equal(t, es.PNGettext("knot", "%d bow", "%d bows", 2), "%d lazos")
-	assert_equal(t, es.PNGettext("weapon", "%d bow", "%d bows", 1), "%d arco")
-	assert_equal(t, es.PNGettext("weapon", "%d bow", "%d bows", 2), "%d arcos")
+	assert_equal(t, es.NPGettext("knot", "%d bow", "%d bows", 1), "%d lazo")
+	assert_equal(t, es.NPGettext("knot", "%d bow", "%d bows", 2), "%d lazos")
+	assert_equal(t, es.NPGettext("weapon", "%d bow", "%d bows", 1), "%d arco")
+	assert_equal(t, es.NPGettext("weapon", "%d bow", "%d bows", 2), "%d arcos")
 
 	// There is no contextless translation
 	assert_equal(t, es.Gettext("bow"), "bow")
@@ -109,7 +109,7 @@ func TestMessageContext(t *testing.T) {
 	// With no catalog, the message ID is returned and context ignored
 	empty := trans.Locale()
 	assert_equal(t, empty.PGettext("knot", "bow"), "bow")
-	assert_equal(t, empty.PNGettext("knot", "%d bow", "%d bows", 1), "%d bow")
+	assert_equal(t, empty.NPGettext("knot", "%d bow", "%d bows", 1), "%d bow")
 }
 
 func TestFallbackCatalog(t *testing.T) {

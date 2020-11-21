@@ -70,12 +70,12 @@ func (c Catalog) PGettext(msgctxt, msgid string) string {
 	return msgid
 }
 
-// PNGettext returns a translation of the provided message using the
+// NPGettext returns a translation of the provided message using the
 // provided context and plural form.
 //
 // This method combines the functionality of the NGettext and PGettext
 // variants.
-func (c Catalog) PNGettext(msgctxt, msgid, msgidPlural string, n uint32) string {
+func (c Catalog) NPGettext(msgctxt, msgid, msgidPlural string, n uint32) string {
 	if msgstr, ok := c.findMsg(msgctxt+"\x04"+msgid, true, n); ok {
 		return msgstr
 	}

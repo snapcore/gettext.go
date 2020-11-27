@@ -3,9 +3,8 @@
 package gettext
 
 import (
-	"fmt"
 	"os"
-	"path"
+	"path/filepath"
 	"sync"
 )
 
@@ -32,12 +31,12 @@ type TextDomain struct {
 const DefaultLocaleDir = "/usr/share/locale"
 
 // PathResolver resolves a path to a mo file
-type PathResolver func(root string, locale string, domain string) string
+type PathResolver func(root, locale, domain string) string
 
 // DefaultResolver resolves paths in the standard format of:
 // <root>/<locale>/LC_MESSAGES/<domain>.mo
-func DefaultResolver(root string, locale string, domain string) string {
-	return path.Join(root, locale, "LC_MESSAGES", fmt.Sprintf("%s.mo", domain))
+func DefaultResolver(root, locale, domain string) string {
+	return filepath.Join(root, locale, "LC_MESSAGES", domain+".mo")
 }
 
 // Preload a list of locales (if they're available). This is useful if you want

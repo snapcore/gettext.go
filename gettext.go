@@ -24,6 +24,13 @@ type TextDomain struct {
 	// gettext directory layout.
 	PathResolver PathResolver
 
+	// UseLangpacks determines whether catalogs from language
+	// packs will be used.  Language packs are a non-standard
+	// feature found in Ubuntu and OpenSUSE where additional
+	// translation catalogues may be provided by the operating
+	// system to supplement those packaged with an application.
+	UseLangpacks bool
+
 	mu    sync.Mutex
 	cache map[string]*mocatalog
 }
@@ -58,6 +65,13 @@ func (t *TextDomain) load(locale string) *mocatalog {
 		resolver = DefaultResolver
 	}
 	filename := resolver(localeDir, locale, t.Name)
+	return t.loadFile(filename)
+}
+
+var langpackLocaleDir = "/usr/share/locale-langpack"
+
+func (t *TextDomain) loadLangpack(locale string) *mocatalog {
+	filename := DefaultResolver(langpackLocaleDir, locale, t.Name)
 	return t.loadFile(filename)
 }
 
@@ -98,6 +112,12 @@ func (t *TextDomain) Locale(languages ...string) Catalog {
 		mo := t.load(lang)
 		if mo != nil {
 			mos = append(mos, mo)
+		}
+		if t.UseLangpacks {
+			mo = t.loadLangpack(lang)
+			if mo != nil {
+				mos = append(mos, mo)
+			}
 		}
 	}
 	return Catalog{mos}

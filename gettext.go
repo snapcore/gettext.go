@@ -50,17 +50,6 @@ func (t *TextDomain) Preload(locales ...string) {
 }
 
 func (t *TextDomain) load(locale string) *mocatalog {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	if t.cache == nil {
-		t.cache = make(map[string]*mocatalog)
-	}
-
-	if catalog, ok := t.cache[locale]; ok {
-		return catalog
-	}
-
 	localeDir := t.LocaleDir
 	if localeDir == "" {
 		localeDir = DefaultLocaleDir
@@ -69,9 +58,24 @@ func (t *TextDomain) load(locale string) *mocatalog {
 	if resolver == nil {
 		resolver = DefaultResolver
 	}
-	t.cache[locale] = nil
-	path := resolver(localeDir, locale, t.Name)
-	f, err := os.Open(path)
+	filename := resolver(localeDir, locale, t.Name)
+	return t.loadFile(filename)
+}
+
+func (t *TextDomain) loadFile(filename string) *mocatalog {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.cache == nil {
+		t.cache = make(map[string]*mocatalog)
+	}
+
+	if catalog, ok := t.cache[filename]; ok {
+		return catalog
+	}
+
+	t.cache[filename] = nil
+	f, err := os.Open(filename)
 	if err != nil {
 		return nil
 	}
@@ -80,7 +84,7 @@ func (t *TextDomain) load(locale string) *mocatalog {
 	if err != nil {
 		return nil
 	}
-	t.cache[locale] = catalog
+	t.cache[filename] = catalog
 	return catalog
 }
 

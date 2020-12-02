@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"path/filepath"
 	"testing"
 )
 
@@ -270,4 +271,57 @@ func TestNotMoFile(t *testing.T) {
 		"order 2 beers",
 	)
 
+}
+
+func TestUseLangpacks(t *testing.T) {
+	dir, err := ioutil.TempDir("", "gogettext")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+
+	oldLangpackDir := langpackLocaleDir
+	defer func() {
+		langpackLocaleDir = oldLangpackDir
+	}()
+	localeDir := filepath.Join(dir, "locale")
+	langpackLocaleDir = filepath.Join(dir, "langpack")
+
+	err = os.MkdirAll(filepath.Join(localeDir, "en", "LC_MESSAGES"), 0777)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = os.MkdirAll(filepath.Join(langpackLocaleDir, "ja", "LC_MESSAGES"), 0777)
+	if err != nil {
+		t.Fatal(err)
+	}
+	curDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = os.Symlink(
+		filepath.Join(curDir, "testdata/en/messages.mo"),
+		filepath.Join(localeDir, "en", "LC_MESSAGES", "messages.mo"),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = os.Symlink(
+		filepath.Join(curDir, "testdata/ja/messages.mo"),
+		filepath.Join(langpackLocaleDir, "ja", "LC_MESSAGES", "messages.mo"),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Without langpack support, english is chosen
+	domain := &TextDomain{Name: "messages", LocaleDir: localeDir}
+	locale := domain.Locale("ja", "en")
+	assert_equal(t, locale.Gettext("greeting"), "Hello")
+
+	// With langpack support enabled, the preferred Japanese
+	// translation from the langpack is chosen instead.
+	domain.UseLangpacks = true
+	locale = domain.Locale("ja", "en")
+	assert_equal(t, locale.Gettext("greeting"), "こんいちは")
 }

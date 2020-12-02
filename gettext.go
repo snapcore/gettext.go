@@ -3,9 +3,8 @@
 package gettext
 
 import (
-	"fmt"
 	"os"
-	"path"
+	"path/filepath"
 	"sync"
 )
 
@@ -25,6 +24,13 @@ type TextDomain struct {
 	// gettext directory layout.
 	PathResolver PathResolver
 
+	// UseLangpacks determines whether catalogs from language
+	// packs will be used.  Language packs are a non-standard
+	// feature found in Ubuntu and OpenSUSE where additional
+	// translation catalogues may be provided by the operating
+	// system to supplement those packaged with an application.
+	UseLangpacks bool
+
 	mu    sync.Mutex
 	cache map[string]*mocatalog
 }
@@ -32,12 +38,12 @@ type TextDomain struct {
 const DefaultLocaleDir = "/usr/share/locale"
 
 // PathResolver resolves a path to a mo file
-type PathResolver func(root string, locale string, domain string) string
+type PathResolver func(root, locale, domain string) string
 
 // DefaultResolver resolves paths in the standard format of:
 // <root>/<locale>/LC_MESSAGES/<domain>.mo
-func DefaultResolver(root string, locale string, domain string) string {
-	return path.Join(root, locale, "LC_MESSAGES", fmt.Sprintf("%s.mo", domain))
+func DefaultResolver(root, locale, domain string) string {
+	return filepath.Join(root, locale, "LC_MESSAGES", domain+".mo")
 }
 
 // Preload a list of locales (if they're available). This is useful if you want
@@ -50,17 +56,6 @@ func (t *TextDomain) Preload(locales ...string) {
 }
 
 func (t *TextDomain) load(locale string) *mocatalog {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	if t.cache == nil {
-		t.cache = make(map[string]*mocatalog)
-	}
-
-	if catalog, ok := t.cache[locale]; ok {
-		return catalog
-	}
-
 	localeDir := t.LocaleDir
 	if localeDir == "" {
 		localeDir = DefaultLocaleDir
@@ -69,9 +64,31 @@ func (t *TextDomain) load(locale string) *mocatalog {
 	if resolver == nil {
 		resolver = DefaultResolver
 	}
-	t.cache[locale] = nil
-	path := resolver(localeDir, locale, t.Name)
-	f, err := os.Open(path)
+	filename := resolver(localeDir, locale, t.Name)
+	return t.loadFile(filename)
+}
+
+var langpackLocaleDir = "/usr/share/locale-langpack"
+
+func (t *TextDomain) loadLangpack(locale string) *mocatalog {
+	filename := DefaultResolver(langpackLocaleDir, locale, t.Name)
+	return t.loadFile(filename)
+}
+
+func (t *TextDomain) loadFile(filename string) *mocatalog {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.cache == nil {
+		t.cache = make(map[string]*mocatalog)
+	}
+
+	if catalog, ok := t.cache[filename]; ok {
+		return catalog
+	}
+
+	t.cache[filename] = nil
+	f, err := os.Open(filename)
 	if err != nil {
 		return nil
 	}
@@ -80,7 +97,7 @@ func (t *TextDomain) load(locale string) *mocatalog {
 	if err != nil {
 		return nil
 	}
-	t.cache[locale] = catalog
+	t.cache[filename] = catalog
 	return catalog
 }
 
@@ -95,6 +112,12 @@ func (t *TextDomain) Locale(languages ...string) Catalog {
 		mo := t.load(lang)
 		if mo != nil {
 			mos = append(mos, mo)
+		}
+		if t.UseLangpacks {
+			mo = t.loadLangpack(lang)
+			if mo != nil {
+				mos = append(mos, mo)
+			}
 		}
 	}
 	return Catalog{mos}
